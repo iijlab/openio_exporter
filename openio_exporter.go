@@ -224,12 +224,13 @@ func main() {
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
-			<head><title>Haproxy Exporter</title></head>
-			<body>
-			<h1>OpenIO Exporter</h1>
-			<p><a href="` + *metricsPath + `">Metrics</a></p>
-			</body>
-			</html>`))
+<head><title>OpenIO Exporter</title></head>
+<body>
+<h1>OpenIO Exporter</h1>
+<p><a href="` + *metricsPath + `">Metrics</a></p>
+</body>
+</html>
+`))
 	})
 
 	level.Info(logger).Log("msg", "Listening on address", "address", *listenAddress)
