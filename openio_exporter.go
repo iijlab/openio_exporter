@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +64,7 @@ var (
 type Exporter struct {
 	mutex                sync.RWMutex
 	logger               log.Logger
+	processFilter        *regexp.Regexp
 	runGridInitCmdStatus func() string
 	getProcStat          func(int) (ProcStat, error)
 }
@@ -104,6 +106,10 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		// If at least one process information can be obtained, the result of gridinit_cmd
 		// is considered successful.
 		upVal = 1.0
+
+		if !e.processFilter.MatchString(group) {
+			continue
+		}
 
 		if status == "UP" {
 			ch <- prometheus.MustNewConstMetric(procUp, prometheus.GaugeValue, 1.0, pid, group)
@@ -180,9 +186,10 @@ func parseStatusLine(line string) (key, status, pid, group string, err error) {
 }
 
 // NewExporter returns an initialized exporter.
-func NewExporter(logger log.Logger, runGridInitCmdStatus func() string, getProcStat func(int) (ProcStat, error)) (*Exporter, error) {
+func NewExporter(logger log.Logger, processFilter *regexp.Regexp, runGridInitCmdStatus func() string, getProcStat func(int) (ProcStat, error)) (*Exporter, error) {
 	return &Exporter{
 		logger:               logger,
+		processFilter:        processFilter,
 		runGridInitCmdStatus: runGridInitCmdStatus,
 		getProcStat:          getProcStat,
 	}, nil
@@ -202,6 +209,10 @@ func main() {
 			"web.telemetry-path",
 			"Path under which to expose metrics.",
 		).Default("/metrics").String()
+		processFilter = kingpin.Flag(
+			"openio.process-filter",
+			"Regex that determines which processes to collect metrics. The target is GROUP column.",
+		).Default(`.*`).Regexp()
 	)
 
 	promlogConfig := &promlog.Config{}
@@ -213,8 +224,9 @@ func main() {
 
 	level.Info(logger).Log("msg", "Starting openio_exporter", "version", version.Info())
 	level.Info(logger).Log("msg", "Build context", "context", version.BuildContext())
+	level.Info(logger).Log("msg", "OpenIO process filter", "regexp", processFilter)
 
-	exporter, err := NewExporter(logger, runGridInitCmdStatus, getProcStat)
+	exporter, err := NewExporter(logger, *processFilter, runGridInitCmdStatus, getProcStat)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error creating an exporter", "err", err)
 		os.Exit(1)
